@@ -1,0 +1,30 @@
+{
+  "name": "vayu-index-pwa",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "tsx --test src/utils/*.test.ts"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
+    "vite": "^6.0.7"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.15",
+    "@types/node": "^26.6.11",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
