@@ -152,7 +152,9 @@ export default function MapView({ snapshot, theme }: MapViewProps) {
             />
           </MapContainer>
           {clickToPlace && (
-            <div className="map-pick-note">Tap the map to place destination B</div>
+            <div className="map-pick-note" role="status" aria-live="polite">
+              Tap the map to place destination B. You can also enter coordinates below.
+            </div>
           )}
           <div className="map-caption">
             <span className="map-legend"><i style={{ backgroundColor: band.color }} /> Current AQI</span>
@@ -175,14 +177,18 @@ export default function MapView({ snapshot, theme }: MapViewProps) {
           <div className="route-connector" />
           <div className="route-point">
             <span className="route-letter end">B</span>
-            <div><small>Destination</small><strong>{destinationName}</strong></div>
+            <div><small>Destination</small><strong aria-live="polite">{destinationName}</strong></div>
           </div>
 
           <label className="field-label" htmlFor="map-destination">Find a destination</label>
+          <p className="service-note" id="map-destination-help">
+            Enter a city or latitude, longitude. Coordinate search also works without using the map.
+          </p>
           <div className="search-field compact">
             <Search size={16} aria-hidden="true" />
             <input
               id="map-destination"
+              aria-describedby="map-destination-help"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="City or latitude, longitude"
@@ -206,6 +212,7 @@ export default function MapView({ snapshot, theme }: MapViewProps) {
           <button
             className={`button button-secondary full-width ${clickToPlace ? 'is-selected' : ''}`}
             type="button"
+            aria-pressed={clickToPlace}
             onClick={() => setClickToPlace((value) => !value)}
           >
             <MapPin size={16} /> {clickToPlace ? 'Cancel map selection' : 'Choose on map'}
