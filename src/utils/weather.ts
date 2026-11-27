@@ -117,6 +117,74 @@ function numberOr(value: unknown, fallback: number): number {
   return numberOrNull(value) ?? fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const REQUIRED_CURRENT_FIELDS = [
+  'temperature_2m',
+  'relative_humidity_2m',
+  'apparent_temperature',
+  'is_day',
+  'precipitation',
+  'weather_code',
+  'cloud_cover',
+  'pressure_msl',
+  'wind_speed_10m',
+  'wind_direction_10m',
+  'wind_gusts_10m',
+  'visibility',
+  'uv_index',
+  'shortwave_radiation',
+];
+
+function parseSeries(value: unknown, label: string): Record<string, unknown[]> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isRecord(value)) throw new Error(`Weather service returned invalid ${label} data.`);
+  const series: Record<string, unknown[]> = {};
+  for (const [key, entries] of Object.entries(value)) {
+    if (!Array.isArray(entries)) throw new Error(`Weather service returned invalid ${label} data.`);
+    series[key] = entries;
+  }
+  return series;
+}
+
+function parseWeatherResponse(value: unknown): OpenMeteoWeatherResponse {
+  if (!isRecord(value) || !isRecord(value.current)) {
+    throw new Error('Weather service returned an invalid response. Try again shortly.');
+  }
+  const current = value.current;
+  const missingFields = REQUIRED_CURRENT_FIELDS.filter((field) => {
+    const reading = current[field];
+    return typeof reading !== 'number' || !Number.isFinite(reading);
+  });
+  if (missingFields.length) {
+    throw new Error(
+      `Weather service returned incomplete current conditions (${missingFields.join(', ')}). Try again shortly.`
+    );
+  }
+  if (value.timezone !== undefined && typeof value.timezone !== 'string') {
+    throw new Error('Weather service returned an invalid timezone.');
+  }
+  const optionalNumber = (field: string): number | undefined => {
+    const reading = value[field];
+    if (reading === undefined) return undefined;
+    if (typeof reading !== 'number' || !Number.isFinite(reading)) {
+      throw new Error(`Weather service returned an invalid ${field} value.`);
+    }
+    return reading;
+  };
+  return {
+    latitude: optionalNumber('latitude'),
+    longitude: optionalNumber('longitude'),
+    elevation: optionalNumber('elevation'),
+    timezone: value.timezone,
+    current,
+    hourly: parseSeries(value.hourly, 'hourly forecast'),
+    daily: parseSeries(value.daily, 'daily forecast'),
+  };
+}
+
 function arrayValue(data: Record<string, unknown[]>, key: string, index: number): unknown {
   return data[key]?.[index];
 }
@@ -202,10 +270,12 @@ export function transformWeatherAndAir(
   const weatherNow = indexForTime(weatherTimes, observedAt);
 
   const aqiHistoryByDate = new Map<string, number[]>();
+  const observedDate = observedAt.slice(0, 10);
   (airTimes as unknown[]).forEach((time, index) => {
     const aqi = numberOrNull(arrayValue(airHourly, 'us_aqi', index));
     if (typeof time !== 'string' || aqi === null) return;
     const date = time.slice(0, 10);
+    if (date > observedDate) return;
     const values = aqiHistoryByDate.get(date) ?? [];
     values.push(aqi);
     aqiHistoryByDate.set(date, values);
@@ -341,7 +411,7 @@ export async function fetchWeather(
   if (!weatherResponse.ok) {
     throw new Error(`Weather service returned ${weatherResponse.status}. Try again shortly.`);
   }
-  const weather = (await weatherResponse.json()) as OpenMeteoWeatherResponse;
+  const weather = parseWeatherResponse(await weatherResponse.json());
 
   let air: OpenMeteoAirResponse | null = null;
   try {
@@ -381,26 +451,38 @@ export async function searchLocations(
   if (!response.ok) {
     throw new Error(`Location search returned ${response.status}. Check your connection.`);
   }
-  const data = (await response.json()) as {
-    results?: Array<{
-      id: number;
-      name: string;
-      admin1?: string;
-      country?: string;
-      country_code?: string;
-      latitude: number;
-      longitude: number;
-      timezone?: string;
-    }>;
-  };
-  return (data.results ?? []).map((item) => ({
-    id: String(item.id),
-    name: item.name,
-    admin1: item.admin1,
-    country: item.country,
-    countryCode: item.country_code,
-    latitude: item.latitude,
-    longitude: item.longitude,
-    timezone: item.timezone,
-  }));
+  const data: unknown = await response.json();
+  if (
+    !isRecord(data) ||
+    (data.results !== undefined && data.results !== null && !Array.isArray(data.results))
+  ) {
+    throw new Error('Location search returned an invalid response.');
+  }
+  return (data.results ?? []).map((result: unknown) => {
+    if (
+      !isRecord(result) ||
+      (typeof result.id !== 'string' && typeof result.id !== 'number') ||
+      typeof result.name !== 'string' ||
+      typeof result.latitude !== 'number' ||
+      !Number.isFinite(result.latitude) ||
+      typeof result.longitude !== 'number' ||
+      !Number.isFinite(result.longitude) ||
+      result.latitude < -90 ||
+      result.latitude > 90 ||
+      result.longitude < -180 ||
+      result.longitude > 180
+    ) {
+      throw new Error('Location search returned an invalid result.');
+    }
+    return {
+      id: String(result.id),
+      name: result.name,
+      admin1: typeof result.admin1 === 'string' ? result.admin1 : undefined,
+      country: typeof result.country === 'string' ? result.country : undefined,
+      countryCode: typeof result.country_code === 'string' ? result.country_code : undefined,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      timezone: typeof result.timezone === 'string' ? result.timezone : undefined,
+    };
+  });
 }

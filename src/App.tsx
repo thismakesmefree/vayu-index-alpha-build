@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   Activity,
   ArrowUpRight,
@@ -35,7 +35,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import AtmosphericBackground from './components/AtmosphericBackground';
-import MapView from './components/MapView';
 import {
   aqiBand,
   fetchWeather,
@@ -52,6 +51,8 @@ import type {
 
 type View = 'dashboard' | 'map' | 'coach' | 'history' | 'settings';
 type Theme = 'dark' | 'light';
+
+const MapView = lazy(() => import('./components/MapView'));
 
 const LOCATION_KEY = 'vayu.location.v1';
 const SNAPSHOT_KEY = 'vayu.weather.snapshot.v3';
@@ -906,7 +907,7 @@ function SettingsView({
           <div className="section-title-row"><div><p className="eyebrow">Appearance</p><h2>Choose your theme</h2></div><Moon size={18} /></div>
           <div className="theme-choices">
             {(['dark', 'light'] as const).map((option) => (
-              <button key={option} type="button" className={`theme-choice ${theme === option ? 'selected' : ''}`} onClick={() => onThemeChange(option)}>
+              <button key={option} type="button" className={`theme-choice ${theme === option ? 'selected' : ''}`} aria-pressed={theme === option} onClick={() => onThemeChange(option)}>
                 {option === 'dark' ? <Moon size={18} /> : <Sun size={18} />}<span>{option === 'dark' ? 'Midnight' : 'Daylight'}</span>{theme === option && <Check size={16} />}
               </button>
             ))}
@@ -1071,7 +1072,7 @@ export default function App() {
     }
 
     if (loading && !snapshot) {
-      return <div className="loading-panel"><span className="large-spinner" /><h2>Reading local conditions</h2><p>Connecting to Open-Meteo for weather and air-quality data.</p></div>;
+      return <div className="loading-panel" role="status" aria-live="polite"><span className="large-spinner" aria-hidden="true" /><h2>Reading local conditions</h2><p>Connecting to Open-Meteo for weather and air-quality data.</p></div>;
     }
 
     if (!snapshot) {
@@ -1085,7 +1086,11 @@ export default function App() {
 
     switch (view) {
       case 'map':
-        return <MapView snapshot={snapshot} theme={theme} />;
+        return (
+          <Suspense fallback={<div className="loading-panel" role="status" aria-live="polite">Loading the map…</div>}>
+            <MapView snapshot={snapshot} theme={theme} />
+          </Suspense>
+        );
       case 'coach':
         return <CoachView snapshot={snapshot} />;
       case 'history':
@@ -1121,7 +1126,7 @@ export default function App() {
           <span className="header-city">{snapshot ? snapshot.location.name : currentLabel}</span>
         </div>
         <div className="header-actions">
-          <button type="button" className="header-action-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          <button type="button" className="header-action-button" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
             <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
           </button>
